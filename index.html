@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Magic Fruit Catcher Mobile</title>
   
-  <!-- Εισαγωγή των σωστών βιβλιοθηκών TensorFlow και Handpose -->
+  <!-- Εδώ είναι οι σωστές και πλήρεις βιβλιοθήκες που έλειπαν -->
   <script src="https://jsdelivr.net"></script>
   <script src="https://jsdelivr.net"></script>
   <script src="https://jsdelivr.net"></script>
@@ -104,7 +104,6 @@
       handsList.forEach((hand, index) => {
         const palm = hand.landmarks[9]; // Σημείο στη μέση της παλάμης
         
-        // Απόλυτα ασφαλής μετατροπή συντεταγμένων στην οθόνη
         const vWidth = video.videoWidth || 640;
         const vHeight = video.videoHeight || 480;
         const hX = canvas.width - (palm[0] / vWidth * canvas.width);
@@ -153,7 +152,6 @@
         await setupCamera();
         video.play();
         
-        // Περιμένουμε λίγο να σιγουρευτούμε ότι το βίντεο δίνει διαστάσεις
         await new Promise(r => setTimeout(r, 1000));
         resize();
 
