@@ -4,34 +4,21 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Magic Fruit Catcher Mobile</title>
+  
+  <!-- Εισαγωγή των σωστών βιβλιοθηκών TensorFlow και Handpose -->
   <script src="https://jsdelivr.net"></script>
   <script src="https://jsdelivr.net"></script>
   <script src="https://jsdelivr.net"></script>
-  <script src="https://jsdelivr.net"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/handpose@0.1.0/dist/handpose.min.js"></script>
   
   <style>
-    body {
-      margin: 0; padding: 0; background: #191e32; overflow: hidden;
-      font-family: sans-serif; color: white; user-select: none;
-    }
+    body { margin: 0; padding: 0; background: #191e32; overflow: hidden; font-family: sans-serif; color: white; user-select: none; }
     #container { position: relative; width: 100vw; height: 100vh; }
-    video {
-      position: absolute; width: 100%; height: 100%; object-fit: cover;
-      transform: scaleX(-1); opacity: 0.25; z-index: 1;
-    }
+    video { position: absolute; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); opacity: 0.3; z-index: 1; }
     canvas { position: absolute; width: 100%; height: 100%; z-index: 2; top: 0; left: 0; }
-    #ui {
-      position: absolute; top: 20px; left: 0; width: 100%;
-      display: flex; justify-content: space-around; font-size: 24px;
-      font-weight: bold; z-index: 3; text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
-    }
-    #fullscreen-btn {
-      position: absolute; bottom: 30px; right: 30px; z-index: 4;
-      background: rgba(255,255,255,0.1); border: 2px solid white; color: white;
-      padding: 12px 24px; font-size: 18px; font-weight: bold; border-radius: 8px;
-      cursor: pointer; display: none;
-    }
-    #loading { position: absolute; width: 100%; text-align: center; top: 45%; font-size: 20px; z-index: 4; background: rgba(0,0,0,0.6); padding: 10px 0; }
+    #ui { position: absolute; top: 20px; left: 0; width: 100%; display: flex; justify-content: space-around; font-size: 24px; font-weight: bold; z-index: 3; text-shadow: 2px 2px 4px rgba(0,0,0,0.5); }
+    #fullscreen-btn { position: absolute; bottom: 30px; right: 30px; z-index: 4; background: rgba(255,255,255,0.2); border: 2px solid white; color: white; padding: 12px 24px; font-size: 18px; font-weight: bold; border-radius: 8px; cursor: pointer; display: none; }
+    #loading { position: absolute; width: 100%; text-align: center; top: 45%; font-size: 20px; z-index: 4; background: rgba(0,0,0,0.7); padding: 15px 0; }
   </style>
 </head>
 <body>
@@ -42,7 +29,7 @@
       <div id="timer">⏳ Χρόνος: 60s</div>
     </div>
     <button id="fullscreen-btn" onclick="openFullscreen()">📺 Fullscreen</button>
-    <div id="loading">Παρακαλώ επιτρέψτε την κάμερα...<br>Φόρτωση AI ανίχνευσης...</div>
+    <div id="loading">Αναμονή για την κάμερα...</div>
     <video id="video" playsinline autoplay></video>
     <canvas id="canvas"></canvas>
   </div>
@@ -56,7 +43,7 @@
     const loadingEl = document.getElementById('loading');
     const fsBtn = document.getElementById('fullscreen-btn');
 
-    let model = null; let score = 0; let timer = 60; let gameOver = false; let gameStarted = false;
+    let model = null; let score = 0; let timer = 60; let gameOver = false;
     let fruit = { x: 0, y: -50, speed: 4, size: 25 };
     let bomb = { x: 0, y: -150, speed: 5, size: 20 };
     let handsList = [];
@@ -71,7 +58,7 @@
 
     function resetFruit() {
       fruit.x = Math.random() * (canvas.width - 60) + 30;
-      fruit.y = -50; fruit.speed += 0.2;
+      fruit.y = -50;
     }
 
     function resetBomb() {
@@ -89,11 +76,11 @@
 
     async function setupCamera() {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "user" }, audio: false
+        video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } }, audio: false
       });
       video.srcObject = stream;
-      return new Promise((resolve) => { 
-        video.onloadeddata = () => { resolve(video); }; 
+      return new Promise((resolve) => {
+        video.onloadedmetadata = () => { resolve(video); };
       });
     }
 
@@ -101,23 +88,27 @@
       if (gameOver) return;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // Κίνηση Φρούτου
+      // Φρούτο
       fruit.y += fruit.speed;
       ctx.beginPath(); ctx.fillStyle = '#ff4646';
       ctx.arc(fruit.x, fruit.y, fruit.size, 0, Math.PI * 2); ctx.fill();
       if (fruit.y > canvas.height) resetFruit();
 
-      // Κίνηση Βόμβας
+      // Βόμβα
       bomb.y += bomb.speed;
       ctx.beginPath(); ctx.fillStyle = '#9632cc';
       ctx.arc(bomb.x, bomb.y, bomb.size, 0, Math.PI * 2); ctx.fill();
       if (bomb.y > canvas.height) resetBomb();
 
-      // Ανίχνευση και κίνηση ασπίδας
+      // Ασπίδες Χεριών
       handsList.forEach((hand, index) => {
-        const palm = hand.landmarks[9]; // Χρήση του κέντρου της παλάμης για ακρίβεια
-        const hX = canvas.width - (palm[0] / video.videoWidth * canvas.width);
-        const hY = palm[1] / video.videoHeight * canvas.height;
+        const palm = hand.landmarks[9]; // Σημείο στη μέση της παλάμης
+        
+        // Απόλυτα ασφαλής μετατροπή συντεταγμένων στην οθόνη
+        const vWidth = video.videoWidth || 640;
+        const vHeight = video.videoHeight || 480;
+        const hX = canvas.width - (palm[0] / vWidth * canvas.width);
+        const hY = palm[1] / vHeight * canvas.height;
 
         ctx.beginPath();
         ctx.fillStyle = index === 0 ? 'rgba(50, 255, 150, 0.8)' : 'rgba(0, 200, 255, 0.8)';
@@ -134,8 +125,10 @@
     }
 
     async function predictHands() {
-      if (video.readyState === video.HAVE_ENOUGH_DATA && model) {
-        handsList = await model.estimateHands(video);
+      if (video.readyState >= 2 && model) {
+        try {
+          handsList = await model.estimateHands(video);
+        } catch(err) { console.log(err); }
       }
       setTimeout(predictHands, 1000 / 30);
     }
@@ -149,30 +142,34 @@
           ctx.fillStyle = '#ffd700'; ctx.font = 'bold 40px sans-serif'; ctx.textAlign = 'center';
           ctx.fillText("🎉 ΤΕΛΟΣ ΠΑΙΧΝΙΔΙΟΥ! 🎉", canvas.width/2, canvas.height/2 - 20);
           ctx.font = '24px sans-serif'; ctx.fillStyle = '#ffffff';
-          ctx.fillText(`Σκορ Ομάδας: ${score}`, canvas.width/2, canvas.height/2 + 30);
+          ctx.fillText(`Σκορ: ${score}`, canvas.width/2, canvas.height/2 + 30);
         }
       }, 1000);
     }
 
     async function main() {
       try {
-        loadingEl.innerText = "Ανοιγμα κάμερας... Παρακαλώ δώστε άδεια αν ζητηθεί.";
-        await setupCamera(); 
-        video.play(); 
-        resize();
+        loadingEl.innerText = "1/2 Άνοιγμα κάμερας...";
+        await setupCamera();
+        video.play();
         
-        loadingEl.innerText = "Φόρτωση Μοντέλου AI (Handpose)...";
-        model = await handpose.load(); 
+        // Περιμένουμε λίγο να σιγουρευτούμε ότι το βίντεο δίνει διαστάσεις
+        await new Promise(r => setTimeout(r, 1000));
+        resize();
+
+        loadingEl.innerText = "2/2 Φόρτωση AI (Handpose)...";
+        await tf.setBackend('webgl');
+        model = await handpose.load();
         
         loadingEl.style.display = 'none';
         fsBtn.style.display = 'block';
         
-        gameLoop(); 
+        gameLoop();
         predictHands();
         startTimer();
-      } catch (e) { 
-        loadingEl.innerHTML = "<span style='color:red;'>Σφάλμα σύνδεσης με την κάμερα.</span><br>Παρακαλώ ανανεώστε τη σελίδα και επιτρέψτε την πρόσβαση."; 
-        console.error(e); 
+      } catch (e) {
+        loadingEl.innerHTML = "<span style='color:red;'>Σφάλμα αρχικοποίησης.</span><br>Παρακαλώ κάντε ανανέωση.";
+        console.error(e);
       }
     }
     main();
